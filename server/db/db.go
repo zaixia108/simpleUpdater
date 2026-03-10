@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -15,6 +16,17 @@ type dbStruct struct {
 }
 
 type ApplicationRecord struct {
+	AppName                     string `json:"appName"`
+	AppAvailableVersion         []int  `json:"appAvailableVersion"`
+	AppLatestVersion            int    `json:"appLatestVersion"`
+	AppForceUpdateMiniumVersion int    `json:"appForceUpdateMiniumVersion"`
+	DirectLink                  string `json:"directLink"`
+	NoneDirectLink              string `json:"noneDirectLink"`
+	Notice                      string `json:"notice"`
+	LocalStoragePath            string `json:"localStoragePath"`
+}
+
+type ApplicationRecordWithoutPath struct {
 	AppName                     string `json:"appName"`
 	AppAvailableVersion         []int  `json:"appAvailableVersion"`
 	AppLatestVersion            int    `json:"appLatestVersion"`
@@ -36,6 +48,20 @@ func InitDB() error {
 	LocalDB.DB = db
 	LocalDB.DBlock = sync.RWMutex{}
 	LocalDB.Busy = false
+	// Create the applications table if it doesn't exist
+	_, err = LocalDB.DB.Exec(`CREATE TABLE IF NOT EXISTS applications (
+		AppName TEXT PRIMARY KEY,
+		AppAvailableVersion TEXT,
+		AppLatestVersion INTEGER,
+		AppForceUpdateMiniumVersion INTEGER,
+		DirectLink TEXT,
+		NoneDirectLink TEXT,
+		Notice TEXT,
+		LocalStoragePath TEXT
+	)`)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -48,7 +74,11 @@ func CloseDB() error {
 func AddRecord(record ApplicationRecord) error {
 	LocalDB.DBlock.Lock()
 	defer LocalDB.DBlock.Unlock()
-	_, err := LocalDB.DB.Exec("INSERT INTO applications (AppName, AppAvailableVersion, AppLatestVersion, AppForceUpdateMiniumVersion, DirectLink, NoneDirectLink, Notice) VALUES (?, ?, ?, ?, ?, ?, ?)", record.AppName, fmt.Sprintf("%v", record.AppAvailableVersion), record.AppLatestVersion, record.AppForceUpdateMiniumVersion, record.DirectLink, record.NoneDirectLink, record.Notice)
+	availableVersion, marshalErr := json.Marshal(record.AppAvailableVersion)
+	if marshalErr != nil {
+		return marshalErr
+	}
+	_, err := LocalDB.DB.Exec("INSERT INTO applications (AppName, AppAvailableVersion, AppLatestVersion, AppForceUpdateMiniumVersion, DirectLink, NoneDirectLink, Notice, LocalStoragePath) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", record.AppName, availableVersion, record.AppLatestVersion, record.AppForceUpdateMiniumVersion, record.DirectLink, record.NoneDirectLink, record.Notice, record.LocalStoragePath)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -70,17 +100,17 @@ func RemoveRecord(appName string) error {
 func GetRecord(appName string) (*ApplicationRecord, error) {
 	LocalDB.DBlock.RLock()
 	defer LocalDB.DBlock.RUnlock()
-	row := LocalDB.DB.QueryRow("SELECT AppName, AppAvailableVersion, AppLatestVersion, AppForceUpdateMiniumVersion, DirectLink, NoneDirectLink, Notice FROM applications WHERE AppName = ?", appName)
+	row := LocalDB.DB.QueryRow("SELECT AppName, AppAvailableVersion, AppLatestVersion, AppForceUpdateMiniumVersion, DirectLink, NoneDirectLink, Notice, LocalStoragePath FROM applications WHERE AppName = ?", appName)
 	var record ApplicationRecord
 	var availableVersions string
-	err := row.Scan(&record.AppName, &availableVersions, &record.AppLatestVersion, &record.AppForceUpdateMiniumVersion, &record.DirectLink, &record.NoneDirectLink, &record.Notice)
+	err := row.Scan(&record.AppName, &availableVersions, &record.AppLatestVersion, &record.AppForceUpdateMiniumVersion, &record.DirectLink, &record.NoneDirectLink, &record.Notice, &record.LocalStoragePath)
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
 	}
 	// Convert the availableVersions string back to a slice of float32
 	var versions []int
-	_, err = fmt.Sscanf(availableVersions, "%v", &versions)
+	err = json.Unmarshal([]byte(availableVersions), &versions)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +121,11 @@ func GetRecord(appName string) (*ApplicationRecord, error) {
 func UpdateRecord(record ApplicationRecord) error {
 	LocalDB.DBlock.Lock()
 	defer LocalDB.DBlock.Unlock()
-	_, err := LocalDB.DB.Exec("UPDATE applications SET AppAvailableVersion = ?, AppLatestVersion = ?, AppForceUpdateMiniumVersion = ?, DirectLink = ?, NoneDirectLink = ?, Notice = ? WHERE AppName = ?", fmt.Sprintf("%v", record.AppAvailableVersion), record.AppLatestVersion, record.AppForceUpdateMiniumVersion, record.DirectLink, record.NoneDirectLink, record.Notice, record.AppName)
+	availableVersion, marshalErr := json.Marshal(record.AppAvailableVersion)
+	if marshalErr != nil {
+		return marshalErr
+	}
+	_, err := LocalDB.DB.Exec("UPDATE applications SET AppAvailableVersion = ?, AppLatestVersion = ?, AppForceUpdateMiniumVersion = ?, DirectLink = ?, NoneDirectLink = ?, Notice = ?, LocalStoragePath = ? WHERE AppName = ?", availableVersion, record.AppLatestVersion, record.AppForceUpdateMiniumVersion, record.DirectLink, record.NoneDirectLink, record.Notice, record.LocalStoragePath, record.AppName)
 	if err != nil {
 		fmt.Println(err)
 		return err

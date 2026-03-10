@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"server/db"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,16 +17,34 @@ type handlerFunc struct {
 	cancel context.CancelFunc
 }
 
+func Contains[T comparable](slice []T, v T) bool {
+	for _, x := range slice {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *handlerFunc) addRecordHandler(c *gin.Context) {
 	// 处理添加记录的请求
-	param := db.ApplicationRecord{}
+	param := db.ApplicationRecordWithoutPath{}
 	if err := c.ShouldBindJSON(&param); err != nil {
 		c.JSON(400, gin.H{
 			"message": "Error: Invalid request body.",
 		})
 		return
 	}
-	err := db.AddRecord(param)
+	full := db.ApplicationRecord{
+		AppName:                     param.AppName,
+		AppLatestVersion:            param.AppLatestVersion,
+		AppForceUpdateMiniumVersion: param.AppForceUpdateMiniumVersion,
+		AppAvailableVersion:         param.AppAvailableVersion,
+		DirectLink:                  param.DirectLink,
+		NoneDirectLink:              param.NoneDirectLink,
+		Notice:                      param.Notice,
+	}
+	err := db.AddRecord(full)
 	if err != nil {
 		c.JSON(500, gin.H{
 			"message": "Error: Failed to add record.",
@@ -60,14 +79,23 @@ func (h *handlerFunc) removeRecordHandler(c *gin.Context) {
 
 func (h *handlerFunc) updateOverwriteRecordHandler(c *gin.Context) {
 	// 处理更新记录的请求
-	param := db.ApplicationRecord{}
+	param := db.ApplicationRecordWithoutPath{}
 	if err := c.ShouldBindJSON(&param); err != nil {
 		c.JSON(400, gin.H{
 			"message": "Error: Invalid request body.",
 		})
 		return
 	}
-	err := db.UpdateRecord(param)
+	full := db.ApplicationRecord{
+		AppName:                     param.AppName,
+		AppLatestVersion:            param.AppLatestVersion,
+		AppForceUpdateMiniumVersion: param.AppForceUpdateMiniumVersion,
+		AppAvailableVersion:         param.AppAvailableVersion,
+		DirectLink:                  param.DirectLink,
+		NoneDirectLink:              param.NoneDirectLink,
+		Notice:                      param.Notice,
+	}
+	err := db.UpdateRecord(full)
 	if err != nil {
 		c.JSON(500, gin.H{
 			"message": "Error: Failed to update record.",
@@ -81,7 +109,7 @@ func (h *handlerFunc) updateOverwriteRecordHandler(c *gin.Context) {
 
 func (h *handlerFunc) updateRecordHandler(c *gin.Context) {
 	appName := c.Param("appName")
-	part := c.Param("part")
+	part := c.Param("param")
 	value := c.Param("value")
 	if appName == "" || part == "" || value == "" {
 		c.JSON(400, gin.H{
@@ -97,21 +125,35 @@ func (h *handlerFunc) updateRecordHandler(c *gin.Context) {
 		return
 	}
 	var updateErr error
-	switch part {
-	case "AppLatestVersion":
+	switch strings.ToUpper(part) {
+	case "APPLATESTVERSION":
 		ver, updateErr := strconv.Atoi(value)
-		nowRecord.AppLatestVersion = ver
-		nowRecord.AppAvailableVersion = append(nowRecord.AppAvailableVersion, ver)
-		if len(nowRecord.AppAvailableVersion) > 20 {
-			nowRecord.AppAvailableVersion = nowRecord.AppAvailableVersion[len(nowRecord.AppAvailableVersion)-20:]
-		}
 		if updateErr != nil {
 			c.JSON(400, gin.H{
 				"message": "Error: Invalid value for AppLatestVersion.",
 			})
 			return
 		}
-	case "AppForceUpdateMiniumVersion":
+		nowRecord.AppLatestVersion = ver
+		if !Contains(nowRecord.AppAvailableVersion, ver) {
+			nowRecord.AppAvailableVersion = append(nowRecord.AppAvailableVersion, ver)
+		}
+		if len(nowRecord.AppAvailableVersion) > 20 {
+			nowRecord.AppAvailableVersion = nowRecord.AppAvailableVersion[len(nowRecord.AppAvailableVersion)-20:]
+		}
+		fmt.Println(nowRecord)
+		err := db.UpdateRecord(*nowRecord)
+		if err != nil {
+			c.JSON(500, gin.H{
+				"message": "Error: Failed to update record.",
+			})
+			return
+		}
+		c.JSON(200, gin.H{
+			"message": "Record updated successfully.",
+		})
+		return
+	case "APPFORCEUPDATEMINIUMVERSION":
 		nowRecord.AppForceUpdateMiniumVersion, updateErr = strconv.Atoi(value)
 		if updateErr != nil {
 			c.JSON(400, gin.H{
@@ -119,14 +161,55 @@ func (h *handlerFunc) updateRecordHandler(c *gin.Context) {
 			})
 			return
 		}
-	case "DirectLink":
+		err := db.UpdateRecord(*nowRecord)
+		if err != nil {
+			c.JSON(500, gin.H{
+				"message": "Error: Failed to update record.",
+			})
+			return
+		}
+		c.JSON(200, gin.H{
+			"message": "Record updated successfully.",
+		})
+		return
+	case "DIRECTLINK":
 		nowRecord.DirectLink = value
+		err := db.UpdateRecord(*nowRecord)
+		if err != nil {
+			c.JSON(500, gin.H{
+				"message": "Error: Failed to update record.",
+			})
+			return
+		}
+		c.JSON(200, gin.H{
+			"message": "Record updated successfully.",
+		})
 		return
-	case "NoneDirectLink":
+	case "NONEDIRECTLINK":
 		nowRecord.NoneDirectLink = value
+		err := db.UpdateRecord(*nowRecord)
+		if err != nil {
+			c.JSON(500, gin.H{
+				"message": "Error: Failed to update record.",
+			})
+			return
+		}
+		c.JSON(200, gin.H{
+			"message": "Record updated successfully.",
+		})
 		return
-	case "Notice":
+	case "NOTICE":
 		nowRecord.Notice = value
+		err := db.UpdateRecord(*nowRecord)
+		if err != nil {
+			c.JSON(500, gin.H{
+				"message": "Error: Failed to update record.",
+			})
+			return
+		}
+		c.JSON(200, gin.H{
+			"message": "Record updated successfully.",
+		})
 		return
 	default:
 		c.JSON(400, gin.H{
@@ -145,9 +228,10 @@ func (h *handlerFunc) getRecordHandler(c *gin.Context) {
 		return
 	}
 	record, err := db.GetRecord(appName)
+	fmt.Println(record)
 	if err != nil {
 		c.JSON(500, gin.H{
-			"message": "Error: Failed to get record.",
+			"message": fmt.Sprintf("Error: Failed to get record: %s", err.Error()),
 		})
 		return
 	}
@@ -158,6 +242,7 @@ func (h *handlerFunc) getRecordHandler(c *gin.Context) {
 }
 
 func (h *handlerFunc) shutdownServerHandler(c *gin.Context) {
+	h.cancel()
 	c.JSON(200, gin.H{
 		"message": "Server is shutting down.",
 	})
@@ -165,6 +250,7 @@ func (h *handlerFunc) shutdownServerHandler(c *gin.Context) {
 }
 
 func main() {
+	db.InitDB()
 	fmt.Println("Initializing router...")
 	port := fmt.Sprintf(":%d", 8080)
 	gin.SetMode(gin.ReleaseMode)
@@ -177,7 +263,7 @@ func main() {
 	{
 		updaterGroup.POST("/add", handlers.addRecordHandler)
 		updaterGroup.POST("/remove/:appName", handlers.removeRecordHandler)
-		updaterGroup.PUT("/update/overwtite", handlers.updateOverwriteRecordHandler)
+		updaterGroup.PUT("/update/overwrite", handlers.updateOverwriteRecordHandler)
 		updaterGroup.PUT("/update/part/:appName/:param/:value", handlers.updateRecordHandler)
 		updaterGroup.GET("/get/:appName", handlers.getRecordHandler)
 	}
@@ -205,6 +291,7 @@ func main() {
 			}
 			fmt.Println("Client HTTP server shutdown successfully")
 			cancel()
+			db.CloseDB()
 			return
 		}
 	}
