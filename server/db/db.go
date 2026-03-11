@@ -132,3 +132,33 @@ func UpdateRecord(record ApplicationRecord) error {
 	}
 	return nil
 }
+
+func GetAllRecords() ([]ApplicationRecord, error) {
+	LocalDB.DBlock.RLock()
+	defer LocalDB.DBlock.RUnlock()
+	rows, err := LocalDB.DB.Query("SELECT AppName, AppAvailableVersion, AppLatestVersion, AppForceUpdateMiniumVersion, DirectLink, NoneDirectLink, Notice, LocalStoragePath FROM applications")
+	if err != nil {
+		log.Logger.Error(err.Error())
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []ApplicationRecord
+	for rows.Next() {
+		var record ApplicationRecord
+		var availableVersions string
+		err := rows.Scan(&record.AppName, &availableVersions, &record.AppLatestVersion, &record.AppForceUpdateMiniumVersion, &record.DirectLink, &record.NoneDirectLink, &record.Notice, &record.LocalStoragePath)
+		if err != nil {
+			log.Logger.Error(err.Error())
+			return nil, err
+		}
+		var versions []int
+		err = json.Unmarshal([]byte(availableVersions), &versions)
+		if err != nil {
+			return nil, err
+		}
+		record.AppAvailableVersion = versions
+		records = append(records, record)
+	}
+	return records, nil
+}

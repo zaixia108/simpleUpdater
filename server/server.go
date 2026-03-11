@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"net/http"
 	"server/db"
@@ -240,6 +241,20 @@ func (h *handlerFunc) getRecordHandler(c *gin.Context) {
 	})
 }
 
+func (h *handlerFunc) listRecordsHandler(c *gin.Context) {
+	records, err := db.GetAllRecords()
+	if err != nil {
+		c.JSON(500, gin.H{
+			"message": fmt.Sprintf("Error: Failed to list records: %s", err.Error()),
+		})
+		return
+	}
+	c.JSON(200, gin.H{
+		"message": "Success",
+		"data":    records,
+	})
+}
+
 func (h *handlerFunc) shutdownServerHandler(c *gin.Context) {
 	h.cancel()
 	c.JSON(200, gin.H{
@@ -249,7 +264,10 @@ func (h *handlerFunc) shutdownServerHandler(c *gin.Context) {
 }
 
 func main() {
-	db.InitDB()
+	if err := db.InitDB(); err != nil {
+		log.Logger.Error(fmt.Sprintf("Failed to initialize database: %s", err.Error()))
+		return
+	}
 	log.Logger.Info("Initializing router...")
 	port := fmt.Sprintf(":%d", 8080)
 	gin.SetMode(gin.ReleaseMode)
@@ -258,6 +276,10 @@ func main() {
 	handlers := &handlerFunc{}
 	handlers.ctx, handlers.cancel = context.WithCancel(context.Background())
 	// 定义路由
+	r.GET("/", func(c *gin.Context) {
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.String(200, indexHTML)
+	})
 	updaterGroup := r.Group("/api/v1")
 	{
 		updaterGroup.POST("/add", handlers.addRecordHandler)
@@ -265,6 +287,7 @@ func main() {
 		updaterGroup.PUT("/update/overwrite", handlers.updateOverwriteRecordHandler)
 		updaterGroup.PUT("/update/part/:appName/:param/:value", handlers.updateRecordHandler)
 		updaterGroup.GET("/get/:appName", handlers.getRecordHandler)
+		updaterGroup.GET("/list", handlers.listRecordsHandler)
 	}
 	srv := &http.Server{
 		Addr:    port,
@@ -290,8 +313,13 @@ func main() {
 			}
 			log.Logger.Info("Client HTTP server shutdown successfully")
 			cancel()
-			db.CloseDB()
+			if err := db.CloseDB(); err != nil {
+				log.Logger.Error(fmt.Sprintf("Error closing database: %s", err.Error()))
+			}
 			return
 		}
 	}
 }
+
+//go:embed index.html
+var indexHTML string
