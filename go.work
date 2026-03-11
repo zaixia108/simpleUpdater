@@ -1,2 +1,7 @@
 go 1.25.5
-use server
+
+use (
+	./server
+	./tools
+	./client
+)

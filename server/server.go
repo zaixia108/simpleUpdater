@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	log "tools"
 
 	"github.com/gin-gonic/gin"
 )
@@ -141,7 +142,6 @@ func (h *handlerFunc) updateRecordHandler(c *gin.Context) {
 		if len(nowRecord.AppAvailableVersion) > 20 {
 			nowRecord.AppAvailableVersion = nowRecord.AppAvailableVersion[len(nowRecord.AppAvailableVersion)-20:]
 		}
-		fmt.Println(nowRecord)
 		err := db.UpdateRecord(*nowRecord)
 		if err != nil {
 			c.JSON(500, gin.H{
@@ -228,7 +228,6 @@ func (h *handlerFunc) getRecordHandler(c *gin.Context) {
 		return
 	}
 	record, err := db.GetRecord(appName)
-	fmt.Println(record)
 	if err != nil {
 		c.JSON(500, gin.H{
 			"message": fmt.Sprintf("Error: Failed to get record: %s", err.Error()),
@@ -251,7 +250,7 @@ func (h *handlerFunc) shutdownServerHandler(c *gin.Context) {
 
 func main() {
 	db.InitDB()
-	fmt.Println("Initializing router...")
+	log.Logger.Info("Initializing router...")
 	port := fmt.Sprintf(":%d", 8080)
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -274,7 +273,7 @@ func main() {
 	go func() {
 		err := srv.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
-			fmt.Printf("[ERROR] - Error starting server: %s\n", err.Error())
+			log.Logger.Error(fmt.Sprintf("Error starting server: %s\n", err.Error()))
 		}
 		return
 	}()
@@ -284,12 +283,12 @@ func main() {
 			contextShutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			cancelErr := srv.Shutdown(contextShutdown)
 			if cancelErr != nil {
-				fmt.Println(fmt.Sprintf("[ERROR] - Client HTTP server shutdown error: %s", cancelErr.Error()))
+				log.Logger.Error(fmt.Sprintf("Client HTTP server shutdown error: %s", cancelErr.Error()))
 				_ = srv.Close()
 				cancel()
 				return
 			}
-			fmt.Println("Client HTTP server shutdown successfully")
+			log.Logger.Info("Client HTTP server shutdown successfully")
 			cancel()
 			db.CloseDB()
 			return

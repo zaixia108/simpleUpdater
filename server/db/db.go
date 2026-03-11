@@ -3,8 +3,8 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"sync"
+	log "tools"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -80,7 +80,7 @@ func AddRecord(record ApplicationRecord) error {
 	}
 	_, err := LocalDB.DB.Exec("INSERT INTO applications (AppName, AppAvailableVersion, AppLatestVersion, AppForceUpdateMiniumVersion, DirectLink, NoneDirectLink, Notice, LocalStoragePath) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", record.AppName, availableVersion, record.AppLatestVersion, record.AppForceUpdateMiniumVersion, record.DirectLink, record.NoneDirectLink, record.Notice, record.LocalStoragePath)
 	if err != nil {
-		fmt.Println(err)
+		log.Logger.Error(err.Error())
 		return err
 	}
 	return nil
@@ -91,7 +91,7 @@ func RemoveRecord(appName string) error {
 	defer LocalDB.DBlock.Unlock()
 	_, err := LocalDB.DB.Exec("DELETE FROM applications WHERE AppName = ?", appName)
 	if err != nil {
-		fmt.Println(err)
+		log.Logger.Error(err.Error())
 		return err
 	}
 	return nil
@@ -105,7 +105,7 @@ func GetRecord(appName string) (*ApplicationRecord, error) {
 	var availableVersions string
 	err := row.Scan(&record.AppName, &availableVersions, &record.AppLatestVersion, &record.AppForceUpdateMiniumVersion, &record.DirectLink, &record.NoneDirectLink, &record.Notice, &record.LocalStoragePath)
 	if err != nil {
-		fmt.Println(err)
+		log.Logger.Error(err.Error())
 		return nil, err
 	}
 	// Convert the availableVersions string back to a slice of float32
@@ -127,7 +127,7 @@ func UpdateRecord(record ApplicationRecord) error {
 	}
 	_, err := LocalDB.DB.Exec("UPDATE applications SET AppAvailableVersion = ?, AppLatestVersion = ?, AppForceUpdateMiniumVersion = ?, DirectLink = ?, NoneDirectLink = ?, Notice = ?, LocalStoragePath = ? WHERE AppName = ?", availableVersion, record.AppLatestVersion, record.AppForceUpdateMiniumVersion, record.DirectLink, record.NoneDirectLink, record.Notice, record.LocalStoragePath, record.AppName)
 	if err != nil {
-		fmt.Println(err)
+		log.Logger.Error(err.Error())
 		return err
 	}
 	return nil
